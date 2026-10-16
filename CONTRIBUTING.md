@@ -5,4 +5,4 @@ with a one-page onboarding note; the client repo's `CLAUDE.md` and `BUILD.md` ar
 job. Branch, open a small PR, keep commits in Conventional Commits form; CI posts a preview
 URL; Jamie merges. Nobody pushes to `main`.
 
-Public repositories (`icm-method`, this one) take issues and PRs from anyone.
+Public repositories (`blueprint`, this one) take issues and PRs from anyone.

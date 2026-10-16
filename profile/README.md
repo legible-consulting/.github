@@ -23,7 +23,7 @@ Jamie makes by hand; CI is the source of truth.
 
 | Repository | What it is |
 |---|---|
-| [icm-method](https://github.com/legible-consulting/icm-method) | The template every client build is rendered from (`site`, `app`, `platform`, `icm-workspace`), the conventions those repos keep, and the workshop kit. |
+| [blueprint](https://github.com/legible-consulting/blueprint) | The template every client build is rendered from (`site`, `app`, `platform`, `workspace`), the conventions those repos keep, and the workshop kit. |
 | [.github](https://github.com/legible-consulting/.github) | This page, the reusable CI workflows client repos call, and the default community files. |
 
 Client repositories are private unless the client prefers otherwise. The operating
