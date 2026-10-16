@@ -1,0 +1,102 @@
+# check-client: what every client repo checks on push and PR, per tier (CI is truth; never
+# run locally). Called from the client repo's ci.yml:
+#   uses: legible-consulting/.github/.github/workflows/check-client.yml@main
+#   with: { tier: site }
+name: check-client
+
+on:
+  workflow_call:
+    inputs:
+      tier:
+        description: site, app, platform or workspace (the blueprint's tier answer)
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    # Private repos on GitHub Free get no secret scanning; this is the guard. The binary,
+    # not gitleaks-action: the action needs a paid licence on organisation accounts.
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install gitleaks
+        run: |
+          f="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSLO "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${f}"
+          echo "${GITLEAKS_SHA256}  ${f}" | sha256sum -c -
+          tar -xzf "${f}" gitleaks
+      - name: Scan the full history
+        run: ./gitleaks git --redact --no-banner -v .
+
+  workflows:
+    # A broken workflow fails silently until the day it is needed; actionlint catches it on push.
+    runs-on: ubuntu-latest
+    env:
+      ACTIONLINT_VERSION: 1.7.12
+      ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install actionlint
+        run: |
+          f="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -fsSLO "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${f}"
+          echo "${ACTIONLINT_SHA256}  ${f}" | sha256sum -c -
+          tar -xzf "${f}" actionlint
+      - name: actionlint
+        run: ./actionlint -color
+
+  code:
+    # site, app, platform: lint, typecheck and test, each only if package.json defines it, so a
+    # freshly rendered repo with no code yet is green. npm or pnpm, chosen by the lockfile.
+    # workspace: every stage contract keeps the ICM shape, as in the house.
+    runs-on: ubuntu-latest
+    env:
+      TIER: ${{ inputs.tier }}
+    steps:
+      - name: Known tier
+        run: |
+          case "$TIER" in site|app|platform|workspace) ;; *)
+            echo "::error::unknown tier '${TIER}' (site, app, platform, workspace)"; exit 1 ;;
+          esac
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Contract sections
+        if: inputs.tier == 'workspace'
+        run: |
+          fail=0
+          while IFS= read -r f; do
+            for s in Inputs Process Outputs; do
+              grep -qx "## ${s}" "$f" || { echo "::error file=${f}::missing '## ${s}'"; fail=1; }
+            done
+          done < <(git ls-files '*CONTEXT.md')
+          exit "$fail"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: inputs.tier != 'workspace' && hashFiles('package.json') != ''
+        with:
+          node-version: 22
+      - name: Install, lint, typecheck, test
+        if: inputs.tier != 'workspace' && hashFiles('package.json') != ''
+        run: |
+          if [ -f pnpm-lock.yaml ]; then
+            corepack enable
+            pnpm install --frozen-lockfile
+            run() { pnpm run --if-present "$1"; }
+          else
+            npm ci
+            run() { npm run --if-present "$1"; }
+          fi
+          run lint
+          run typecheck
+          run test
