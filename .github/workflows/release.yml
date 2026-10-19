@@ -1,0 +1,46 @@
+# release: release-please opens and updates the release PR on every push to main of the caller.
+# Merging that PR is the release: the tag, CHANGELOG.md and the GitHub release come from that
+# merge, and nothing else here tags or publishes. Jamie merges it, by hand, after the preview
+# is signed off (house boundary: a release is Jamie's merge).
+#
+# Called from the client repo's ci.yml on push to main. A called workflow can only narrow the
+# caller's permissions, so the caller's job grants what this job uses:
+#   release:
+#     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+#     permissions: { contents: write, pull-requests: write }
+#     uses: legible-consulting/.github/.github/workflows/release.yml@main
+#     secrets: { token: ${{ secrets.GITHUB_TOKEN }} }
+#
+# Known limit: a PR that GITHUB_TOKEN opens starts no workflows, so check-client does not run
+# on the release PR. Pass a fine-grained PAT as `token` when the release PR must run checks.
+name: release
+
+on:
+  workflow_call:
+    inputs:
+      release-type:
+        description: release-please release type, for example node, python, simple or go. Default node.
+        type: string
+        required: false
+        default: node
+    secrets:
+      token:
+        description: the caller's GITHUB_TOKEN, or a PAT when the release PR must run checks
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  release-please:
+    # The caller's event decides. A call from a PR run or another branch does nothing.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          token: ${{ secrets.token }}
+          release-type: ${{ inputs.release-type }}
