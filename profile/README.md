@@ -26,8 +26,9 @@ Jamie makes by hand; CI is the source of truth.
 | [blueprint](https://github.com/legible-consulting/blueprint) | The template every client build is rendered from (`site`, `app`, `platform`, `workspace`), the conventions those repos keep, and the workshop kit. |
 | [.github](https://github.com/legible-consulting/.github) | This page, the reusable CI workflows client repos call, and the default community files. |
 
-Client repositories are private unless the client prefers otherwise. The operating
-repository that runs the business is private and never shared.
+Client builds live under Jamie's own account, not in this organisation. This organisation
+holds the method, the operating repository (private, never shared) and the projects Jamie
+builds together with collaborators.
 
 ## Working with us
 
