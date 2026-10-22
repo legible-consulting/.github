@@ -1,4 +1,4 @@
-# Reusable workflows (Wave 1)
+# Reusable workflows
 
 Called from every client repo's `ci.yml` as
 `legible-consulting/.github/.github/workflows/<file>@<ref>`. Callers pass secrets explicitly.
@@ -6,7 +6,6 @@ Called from every client repo's `ci.yml` as
 | File | Does | Secrets from the caller |
 |---|---|---|
 | `check-client.yml` | **live.** Input `tier`. Three jobs: `secrets` (gitleaks, full history), `workflows` (actionlint), `code` (site, app, platform: lint, typecheck, test if `package.json` defines them, npm or pnpm by lockfile; workspace: every `CONTEXT.md` keeps Inputs, Process, Outputs) | none |
-| `deploy-vercel.yml` | `vercel pull`, `vercel build`, `vercel deploy --prebuilt`; preview on PR (the UAT environment), production on the release merge | `VERCEL_TOKEN`; variables `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` |
 | `release.yml` | **live.** Input `release-type` (default `node`). One job `release-please` on push to `main`: release-please opens or updates the release PR; merging it is the release (tag, `CHANGELOG.md`, GitHub release). Jamie merges it. The caller's job grants `contents: write`, `pull-requests: write` | `token`: the caller's `GITHUB_TOKEN`, or a fine-grained PAT when the release PR must run checks (a PR opened with `GITHUB_TOKEN` starts no workflows) |
 
 A called workflow can only narrow the caller's permissions: the caller's job grants what the
