@@ -1,16 +1,18 @@
-# check-client: what every client repo checks on push and PR, per tier (CI is truth; never
-# run locally). Called from the client repo's ci.yml:
+# check-client: what every client repo checks on push and PR (CI is truth; never run
+# locally). Called from the client repo's ci.yml:
 #   uses: legible-consulting/.github/.github/workflows/check-client.yml@main
-#   with: { tier: site }
+# A client's ICM workspace passes `with: { tier: workspace }`: its CONTEXT.md files are checked
+# instead of code. A build passes nothing.
 name: check-client
 
 on:
   workflow_call:
     inputs:
       tier:
-        description: site, app, platform or workspace (the blueprint's tier answer)
+        description: leave it out for a build. `workspace` for a client's ICM workspace. Any other value is read as a build.
         type: string
-        required: true
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -57,18 +59,11 @@ jobs:
         run: ./actionlint -color
 
   code:
-    # site, app, platform: lint, typecheck and test, each only if package.json defines it, so a
-    # freshly rendered repo with no code yet is green. npm or pnpm, chosen by the lockfile.
-    # workspace: every stage contract keeps the ICM shape, as in the house.
+    # A build: lint, typecheck and test, each only if package.json defines it, so a freshly
+    # rendered repo with no code yet is green. npm or pnpm, chosen by the lockfile.
+    # A workspace: every stage contract keeps the ICM shape, as in the house.
     runs-on: ubuntu-latest
-    env:
-      TIER: ${{ inputs.tier }}
     steps:
-      - name: Known tier
-        run: |
-          case "$TIER" in site|app|platform|workspace) ;; *)
-            echo "::error::unknown tier '${TIER}' (site, app, platform, workspace)"; exit 1 ;;
-          esac
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
