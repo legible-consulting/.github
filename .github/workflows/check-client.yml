@@ -1,18 +1,18 @@
 # check-client: what every client repo checks on push and PR (CI is truth; never run
 # locally). Called from the client repo's ci.yml:
 #   uses: legible-consulting/.github/.github/workflows/check-client.yml@main
-# A client's ICM workspace passes `with: { tier: workspace }`: its CONTEXT.md files are checked
+# A client's ICM workspace passes `with: { workspace: true }`: its CONTEXT.md files are checked
 # instead of code. A build passes nothing.
 name: check-client
 
 on:
   workflow_call:
     inputs:
-      tier:
-        description: leave it out for a build. `workspace` for a client's ICM workspace. Any other value is read as a build.
-        type: string
+      workspace:
+        description: true for a client's ICM workspace. Leave it out for a build.
+        type: boolean
         required: false
-        default: ""
+        default: false
 
 permissions:
   contents: read
@@ -68,7 +68,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Contract sections
-        if: inputs.tier == 'workspace'
+        if: inputs.workspace
         run: |
           fail=0
           while IFS= read -r f; do
@@ -78,11 +78,11 @@ jobs:
           done < <(git ls-files '*CONTEXT.md')
           exit "$fail"
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        if: inputs.tier != 'workspace' && hashFiles('package.json') != ''
+        if: ${{ !inputs.workspace && hashFiles('package.json') != '' }}
         with:
           node-version: 22
       - name: Install, lint, typecheck, test
-        if: inputs.tier != 'workspace' && hashFiles('package.json') != ''
+        if: ${{ !inputs.workspace && hashFiles('package.json') != '' }}
         run: |
           if [ -f pnpm-lock.yaml ]; then
             corepack enable
