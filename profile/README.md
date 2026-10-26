@@ -23,7 +23,7 @@ Jamie makes by hand; CI is the source of truth.
 
 | Repository | What it is |
 |---|---|
-| [blueprint](https://github.com/legible-consulting/blueprint) | The template every client build is rendered from (`site`, `app`, `platform`, `workspace`), the conventions those repos keep, and the workshop kit. |
+| [blueprint](https://github.com/legible-consulting/blueprint) | One template, rendered from its answers for every client build; the conventions those repos keep; and the workshop kit. |
 | [.github](https://github.com/legible-consulting/.github) | This page, the reusable CI workflows client repos call, and the default community files. |
 
 Client builds live under Jamie's own account, not in this organisation. This organisation
