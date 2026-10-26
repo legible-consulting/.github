@@ -1,0 +1,19 @@
+# ci: this repo's own checks (CI is truth; never run locally). It calls check-client.yml from
+# the same commit, so a pull request that changes check-client.yml checks itself with it.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    uses: ./.github/workflows/check-client.yml
