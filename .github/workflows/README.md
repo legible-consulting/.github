@@ -8,6 +8,10 @@ Called from every client repo's `ci.yml` as
 | `check-client.yml` | **live.** Three jobs: `secrets` (gitleaks, full history), `workflows` (actionlint), `code` (a build: lint, typecheck, test if `package.json` defines them, npm or pnpm by lockfile. A client's ICM workspace, `with: { workspace: true }`: every `CONTEXT.md` keeps Inputs, Process, Outputs). A build passes no input | none |
 | `release.yml` | **live.** Input `release-type` (default `node`). One job `release-please` on push to `main`: release-please opens or updates the release PR; merging it is the release (tag, `CHANGELOG.md`, GitHub release). Jamie merges it. The caller's job grants `contents: write`, `pull-requests: write` | `token`: the caller's `GITHUB_TOKEN`, or a fine-grained PAT when the release PR must run checks (a PR opened with `GITHUB_TOKEN` starts no workflows) |
 
+`ci.yml` is this repo's own check, not a reusable workflow. It calls `check-client.yml` from the
+same commit, with no input: gitleaks and actionlint run on this repo, and a change to
+`check-client.yml` checks itself on its pull request.
+
 A called workflow can only narrow the caller's permissions: the caller's job grants what the
 table names. The header comment of each file shows the `ci.yml` job that calls it.
 
