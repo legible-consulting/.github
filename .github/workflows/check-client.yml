@@ -1,8 +1,13 @@
 # check-client: what every client repo checks on push and PR (CI is truth; never run
 # locally). Called from the client repo's ci.yml:
-#   uses: legible-consulting/.github/.github/workflows/check-client.yml@main
+#   check:
+#     uses: legible-consulting/.github/.github/workflows/check-client.yml@main
 # A client's ICM workspace passes `with: { workspace: true }`: its CONTEXT.md files are checked
 # instead of code. A build passes nothing.
+#
+# A private repo is billed per job, rounded up to a minute. So `secrets` runs every time and
+# also reads the changed files. `workflows` and `code` run only when a changed file needs them.
+# The pull request's contract and its merge gate are in gate.yml.
 name: check-client
 
 on:
@@ -21,7 +26,12 @@ jobs:
   secrets:
     # Private repos on GitHub Free get no secret scanning; this is the guard. The binary,
     # not gitleaks-action: the action needs a paid licence on organisation accounts.
+    # The job has the full history already, so it reads the changed files for the other jobs.
+    # A job of its own for that costs one more billed minute on every run.
     runs-on: ubuntu-latest
+    outputs:
+      workflows: ${{ steps.changed.outputs.workflows }}
+      code: ${{ steps.changed.outputs.code }}
     env:
       GITLEAKS_VERSION: 8.30.1
       GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
@@ -30,6 +40,35 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: changed-files
+        id: changed
+        env:
+          WORKSPACE: ${{ inputs.workspace }}
+        run: |
+          # A pull request: the files that differ from its base. A push: the files of the
+          # last commit. No last commit: every file.
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            files="$(git diff --name-only "origin/${GITHUB_BASE_REF}...HEAD")"
+          elif git rev-parse -q --verify HEAD~1 >/dev/null; then
+            files="$(git diff --name-only HEAD~1 HEAD)"
+          else
+            files="$(git ls-files)"
+          fi
+          workflows=false
+          code=false
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            case "$f" in .github/workflows/*) workflows=true ;; esac
+            if [ "$WORKSPACE" = true ]; then
+              # A workspace's code check reads the stage contracts only.
+              case "$f" in CONTEXT.md | */CONTEXT.md) code=true ;; esac
+            else
+              case "$f" in .icm/* | *.md | .github/*) ;; *) code=true ;; esac
+            fi
+          done <<<"$files"
+          echo "workflows=${workflows}" >>"$GITHUB_OUTPUT"
+          echo "code=${code}" >>"$GITHUB_OUTPUT"
+          echo "workflows changed: ${workflows}. code to check: ${code}."
       - name: Install gitleaks
         run: |
           f="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
@@ -40,7 +79,10 @@ jobs:
         run: ./gitleaks git --redact --no-banner -v .
 
   workflows:
-    # A broken workflow fails silently until the day it is needed; actionlint catches it on push.
+    # A broken workflow fails silently until the day it is needed; actionlint catches it on the
+    # change. It runs when a file under .github/workflows/ changed, also when `secrets` failed.
+    needs: secrets
+    if: ${{ !cancelled() && needs.secrets.outputs.workflows == 'true' }}
     runs-on: ubuntu-latest
     env:
       ACTIONLINT_VERSION: 1.7.12
@@ -62,6 +104,11 @@ jobs:
     # A build: lint, typecheck and test, each only if package.json defines it, so a freshly
     # rendered repo with no code yet is green. npm or pnpm, chosen by the lockfile.
     # A workspace: every stage contract keeps the ICM shape, as in the house.
+    # Pull requests only: the deploy of main is the verdict there. A build skips it when every
+    # changed file is under .icm/, .github/ or a markdown file. A workspace runs it when a
+    # CONTEXT.md changed. Never required in a ruleset: see README.md, The ruleset.
+    needs: secrets
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.secrets.outputs.code == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
