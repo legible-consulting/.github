@@ -78,9 +78,11 @@ jobs:
               case "$f" in .icm/* | *.md | .github/*) ;; *) code=true ;; esac
             fi
           done <<<"$files"
-          echo "workflows=${workflows}" >>"$GITHUB_OUTPUT"
-          echo "code=${code}" >>"$GITHUB_OUTPUT"
-          echo "migrations=${migrations}" >>"$GITHUB_OUTPUT"
+          {
+            echo "workflows=${workflows}"
+            echo "code=${code}"
+            echo "migrations=${migrations}"
+          } >>"$GITHUB_OUTPUT"
           echo "workflows changed: ${workflows}. code to check: ${code}. migrations changed: ${migrations}."
       - name: Install gitleaks
         run: |
