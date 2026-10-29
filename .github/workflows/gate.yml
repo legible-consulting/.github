@@ -165,9 +165,15 @@ jobs:
           done
 
           # 5. Two or more open epics: README.md § Order lists each.
-          if [ "${#epics[@]}" -ge 2 ]; then
+          # setup/ holds setup stubs, not an epic: § Order neither counts it nor lists it
+          # (why: a setup stub is not a ticket, the intake contract § The setup stub · 2026-10-29).
+          ordered=()
+          for epic in "${epics[@]}"; do
+            [ "$epic" = setup ] || ordered+=("$epic")
+          done
+          if [ "${#ordered[@]}" -ge 2 ]; then
             order="$(awk '/^## Order/ { on = 1; next } /^## / { on = 0 } on' "${in}/README.md" 2>/dev/null || true)"
-            for epic in "${epics[@]}"; do
+            for epic in "${ordered[@]}"; do
               if ! grep -qE "^[0-9]+\.[[:space:]]+\`?${epic}\`?([[:space:]]|$)" <<<"$order"; then
                 err "${in}/README.md" "§ Order has no line for the open epic ${epic}"
               fi
