@@ -57,6 +57,8 @@ jobs:
           stub=""
           if [ -z "$path" ]; then
             err "${in}/CONTEXT.md" "the body has no '- ticket:' line with the stub's path"
+          elif [[ "$path" == "${in}/setup/"* ]]; then
+            err "$path" "a setup stub is not a ticket"
           else
             dir="$(dirname "$path")"
             base="$(basename "$path")"
@@ -95,7 +97,7 @@ jobs:
                 if [ -n "$f" ]; then
                   err "$f" "the stub of branch ${BRANCH} is open. Move it into _done/ on this branch"
                 fi
-              done < <(find "$in" -name "${slug}.md" -not -path '*/_done/*')
+              done < <(find "$in" -name "${slug}.md" -not -path '*/_done/*' -not -path "${in}/setup/*")
               ;;
           esac
 
@@ -107,7 +109,7 @@ jobs:
           epics=()
           for d in "$in"/*/; do
             epic="$(basename "$d")"
-            case "$epic" in triage | _done) continue ;; esac
+            case "$epic" in triage | _done | setup) continue ;; esac
             epics+=("$epic")
             numbers=()
             total=""
@@ -160,6 +162,27 @@ jobs:
               want="$(seq 1 "$total" | tr '\n' ' ')"
               if [ "$have" != "$want" ]; then
                 err "${d}breakdown.md" "the sequences of ${epic} are ${have% }, not 1 to ${total}"
+              fi
+            fi
+          done
+
+          # 4b. Each stub in setup/ and setup/_done/: § The setup stub.
+          for f in "$in"/setup/*.md "$in"/setup/_done/*.md; do
+            [ -f "$f" ] || continue
+            name="$(basename "$f" .md)"
+            if [ "$(field "$f" setup-slug)" != "$name" ]; then
+              err "$f" "setup-slug is not the file name, ${name}"
+            fi
+            if [ -z "$(field "$f" needs)" ]; then
+              err "$f" "no '- needs:' line"
+            fi
+            if [ -z "$(field "$f" where)" ]; then
+              err "$f" "no '- where:' line"
+            fi
+            if [[ "$f" == "${in}/setup/_done/"* ]]; then
+              first="$(head -n1 "$f")"
+              if ! [[ "$first" =~ ^\>\ (Done|Dropped):\  ]]; then
+                err "$f" "no '> Done:' or '> Dropped:' first line"
               fi
             fi
           done
