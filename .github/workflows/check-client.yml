@@ -5,6 +5,9 @@
 # A client's ICM workspace passes `with: { workspace: true }`: its CONTEXT.md files are checked
 # instead of code. A build passes nothing.
 #
+# A build rendered from blueprint v1.2.0 or later must have .icm/environments.md, the one home
+# of where the build runs, with its five columns. `secrets` checks it, with no job of its own.
+#
 # A private repo is billed per job, rounded up to a minute. So `secrets` runs every time and
 # also reads the changed files. `workflows` and `code` run only when a changed file needs them.
 # The pull request's contract and its merge gate are in gate.yml.
@@ -92,6 +95,54 @@ jobs:
           tar -xzf "${f}" gitleaks
       - name: Scan the full history
         run: ./gitleaks git --redact --no-banner -v .
+      - name: Environments file
+        # A build has .icm/environments.md: one table whose header row has the five columns.
+        # Required from blueprint v1.2.0, the first tag that renders the file. A build on an
+        # older tag gets the file with its `copier update`, so no live repo goes red before it
+        # has the file (2026-10-29). A repo with no .copier-answers.yml is not a blueprint
+        # build, for example this repo. A workspace has no file and no check.
+        # It runs also when the scan failed: each verdict stays visible.
+        if: ${{ !cancelled() && !inputs.workspace }}
+        run: |
+          f=.icm/environments.md
+          a=.copier-answers.yml
+          first=1.2.0
+          if [ ! -f "$a" ]; then
+            echo "No ${a}: not a blueprint build. No check of ${f}."
+            exit 0
+          fi
+          if grep -qx 'workspace: true' "$a"; then
+            echo "A workspace: no check of ${f}."
+            exit 0
+          fi
+          ref="$(sed -n 's/^_commit: *//p' "$a" | tr -d "\"'")"
+          v="${ref#v}"
+          if [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]] &&
+            [ "$(printf '%s\n' "$first" "$v" | sort -V | head -n1)" != "$first" ]; then
+            echo "Rendered from ${ref}, before v${first}: no check of ${f}. Its copier update brings the file."
+            exit 0
+          fi
+          if [ ! -f "$f" ]; then
+            echo "::error file=${f}::${f} is missing. It is the one home of where the build runs. Get it with copier update from blueprint v${first} or later."
+            exit 1
+          fi
+          header="$(grep -m1 '^[[:space:]]*|' "$f" || true)"
+          if [ -z "$header" ]; then
+            echo "::error file=${f}::${f} has no table. Its header row must have the columns Environment, Address, Vercel project, Database, Moves on."
+            exit 1
+          fi
+          missing=()
+          for c in "Environment" "Address" "Vercel project" "Database" "Moves on"; do
+            if ! awk -F'|' -v c="$c" '{ for (i = 1; i <= NF; i++) { g = $i; gsub(/^[ \t]+|[ \t]+$/, "", g); if (g == c) found = 1 } } END { exit !found }' <<<"$header"; then
+              missing+=("$c")
+            fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            list="$(printf '%s, ' "${missing[@]}")"
+            echo "::error file=${f}::The header row of the table in ${f} has no column ${list%, }."
+            exit 1
+          fi
+          echo "${f}: the table has the five columns."
 
   workflows:
     # A broken workflow fails silently until the day it is needed; actionlint catches it on the
