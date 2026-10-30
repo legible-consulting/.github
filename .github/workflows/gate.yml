@@ -39,15 +39,24 @@ jobs:
         env:
           BODY: ${{ github.event.pull_request.body }}
           BRANCH: ${{ github.head_ref }}
+          TITLE: ${{ github.event.pull_request.title }}
         run: |
           in=.icm/intake
-          if [ ! -f "${in}/CONTEXT.md" ]; then
-            echo "No ${in}/CONTEXT.md: no contract to check."
-            exit 0
-          fi
-          body="$(printf '%s\n' "$BODY" | tr -d '\r')"
           fail=0
           err() { echo "::error file=$1::$2"; fail=1; }
+
+          # 0. The title is a Conventional Commit: the squash merge makes it the commit on
+          # main, and release-please reads it (§ Commit types).
+          title_re='^(feat|fix|chore|docs|refactor|style|build|ci|perf|test|revert)(\([^)]+\))?!?: .+'
+          if ! [[ "$TITLE" =~ $title_re ]]; then
+            err "${in}/CONTEXT.md" "the pull request title is not a Conventional Commit, type(scope)?: description"
+          fi
+
+          if [ ! -f "${in}/CONTEXT.md" ]; then
+            echo "No ${in}/CONTEXT.md: no contract to check."
+            exit "$fail"
+          fi
+          body="$(printf '%s\n' "$BODY" | tr -d '\r')"
           # The value of a "- key: value" line in a stub.
           field() { sed -nE "s/^- *$2: *//p" "$1" | head -n1; }
 
