@@ -35,7 +35,7 @@ jobs:
     outputs:
       workflows: ${{ steps.changed.outputs.workflows }}
       code: ${{ steps.changed.outputs.code }}
-      migrations: ${{ steps.changed.outputs.migrations }}
+      has_check_migrations: ${{ steps.changed.outputs.has_check_migrations }}
     env:
       GITLEAKS_VERSION: 8.30.1
       GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
@@ -58,22 +58,11 @@ jobs:
           else
             files="$(git ls-files)"
           fi
-          # A build with a Neon database names its migrations folder in .copier-answers.yml.
-          # No answer: no folder, and the migration-order step never runs.
-          mpath=""
-          if [ "$WORKSPACE" != true ] && [ -f .copier-answers.yml ] &&
-            grep -qx 'database: neon' .copier-answers.yml; then
-            mpath="$(sed -n "s/^migrations_path: *//p" .copier-answers.yml | tr -d "\"'")"
-          fi
           workflows=false
           code=false
-          migrations=false
           while IFS= read -r f; do
             [ -n "$f" ] || continue
             case "$f" in .github/workflows/*) workflows=true ;; esac
-            if [ -n "$mpath" ]; then
-              case "$f" in "$mpath"/*) migrations=true ;; esac
-            fi
             if [ "$WORKSPACE" = true ]; then
               # A workspace's code check reads the stage contracts only.
               case "$f" in CONTEXT.md | */CONTEXT.md) code=true ;; esac
@@ -81,12 +70,21 @@ jobs:
               case "$f" in .icm/* | *.md | .github/*) ;; *) code=true ;; esac
             fi
           done <<<"$files"
+          # The repo's own check:migrations script knows its migrations folder and decides
+          # what order means. This job reads no migrations_path: the blueprint dropped the
+          # question (blueprint pull request 34), and an answer left behind must not silence
+          # the check.
+          has_check_migrations=false
+          if [ "$WORKSPACE" != true ] && [ -f package.json ] &&
+            grep -q '"check:migrations"' package.json; then
+            has_check_migrations=true
+          fi
           {
             echo "workflows=${workflows}"
             echo "code=${code}"
-            echo "migrations=${migrations}"
+            echo "has_check_migrations=${has_check_migrations}"
           } >>"$GITHUB_OUTPUT"
-          echo "workflows changed: ${workflows}. code to check: ${code}. migrations changed: ${migrations}."
+          echo "workflows changed: ${workflows}. code to check: ${code}. check:migrations defined: ${has_check_migrations}."
       - name: Install gitleaks
         run: |
           f="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
@@ -173,11 +171,12 @@ jobs:
     # Pull requests only: the deploy of main is the verdict there. A build skips it when every
     # changed file is under .icm/, .github/ or a markdown file. A workspace runs it when a
     # CONTEXT.md changed. Never required in a ruleset: see README.md, The ruleset.
-    # A change under the migrations folder also runs the repo's check:migrations, if
-    # package.json defines it. The repo owns the check because the check knows its migration
-    # tool. Two checks are the repo's too (2026-10-27): no format check, because formatting is
-    # never a verdict (README.md, Principle 2), and a zero-warning lint limit goes in the repo's
-    # own lint script, because the limit is a flag of the repo's linter.
+    # A pull request that changes code also runs the repo's check:migrations, if package.json
+    # defines it. The repo owns the check because the check knows its migration tool and its
+    # folder; this workflow reads no migrations_path. Two checks are the repo's too
+    # (2026-10-27): no format check, because formatting is never a verdict (README.md,
+    # Principle 2), and a zero-warning lint limit goes in the repo's own lint script, because
+    # the limit is a flag of the repo's linter.
     needs: secrets
     if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.secrets.outputs.code == 'true' }}
     runs-on: ubuntu-latest
@@ -185,7 +184,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The migration-order check compares with the base branch, so it needs the history.
-          fetch-depth: ${{ needs.secrets.outputs.migrations == 'true' && '0' || '1' }}
+          fetch-depth: ${{ needs.secrets.outputs.has_check_migrations == 'true' && '0' || '1' }}
           persist-credentials: false
       - name: Contract sections
         if: inputs.workspace
@@ -202,8 +201,9 @@ jobs:
         with:
           node-version: 22
       - name: Migration order
-        # Before the install: a migration out of order is red in seconds.
-        if: ${{ !inputs.workspace && hashFiles('package.json') != '' && needs.secrets.outputs.migrations == 'true' }}
+        # Before the install: a migration out of order is red in seconds. Runs when the repo
+        # defines check:migrations and the pull request changes code.
+        if: ${{ !inputs.workspace && needs.secrets.outputs.code == 'true' && needs.secrets.outputs.has_check_migrations == 'true' }}
         run: |
           if [ -f pnpm-lock.yaml ]; then
             corepack enable
